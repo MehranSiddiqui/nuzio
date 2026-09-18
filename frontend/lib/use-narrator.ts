@@ -20,9 +20,6 @@ function pickSpeechVoice(voices: SpeechSynthesisVoice[], voice?: Voice) {
   return voices.find((v) => v.default) ?? voices[0];
 }
 
-// Drives the personalized-news "audio brief": queues each article's narration
-// through the browser's built-in speech synthesis, so the feed is genuinely
-// played aloud rather than just simulated with a progress bar.
 export function useNarrator(articles: NewsArticle[], voice?: Voice) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -34,6 +31,8 @@ export function useNarrator(articles: NewsArticle[], voice?: Voice) {
       if (supported) window.speechSynthesis.cancel();
     };
   }, [supported]);
+
+  const speakNextRef = useRef<() => void>(() => {});
 
   const speakNext = useCallback(() => {
     const next = queueRef.current.shift();
@@ -47,10 +46,14 @@ export function useNarrator(articles: NewsArticle[], voice?: Voice) {
     const match = pickSpeechVoice(voices, voice);
     if (match) utterance.voice = match;
     utterance.rate = 1;
-    utterance.onend = () => speakNext();
-    utterance.onerror = () => speakNext();
+    utterance.onend = () => speakNextRef.current();
+    utterance.onerror = () => speakNextRef.current();
     window.speechSynthesis.speak(utterance);
   }, [voice]);
+
+  useEffect(() => {
+    speakNextRef.current = speakNext;
+  }, [speakNext]);
 
   const playFrom = useCallback(
     (startId?: string) => {

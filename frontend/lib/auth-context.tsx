@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext } from "react";
+import useSWR from "swr";
 import { api, PublicUser } from "./api";
 
 interface AuthContextValue {
@@ -12,32 +13,31 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+async function fetchCurrentUser(): Promise<PublicUser | null> {
+  try {
+    const { user } = await api.me();
+    return user;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<PublicUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, mutate } = useSWR("me", fetchCurrentUser, {
+    revalidateOnFocus: false,
+  });
 
   const refresh = useCallback(async () => {
-    try {
-      const { user } = await api.me();
-      setUser(user);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+    await mutate();
+  }, [mutate]);
 
   const logout = useCallback(async () => {
     await api.logout();
-    setUser(null);
-  }, []);
+    await mutate(null, false);
+  }, [mutate]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ user: data ?? null, loading: isLoading, refresh, logout }}>
       {children}
     </AuthContext.Provider>
   );
